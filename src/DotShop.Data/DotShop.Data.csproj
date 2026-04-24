@@ -1,0 +1,45 @@
+<!--
+  DotShop.Data.csproj — Data Layer Project Configuration
+  ========================================================
+  This is a Class Library project — it produces a reusable .dll file
+  rather than a runnable executable. The API project references this
+  library to access the database without mixing data-access code into
+  the API layer.
+
+  Separation of concerns: keeping database code in its own project means
+  you could swap MongoDB for a SQL database later by changing only this
+  project, without touching any controller or service code.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Sdk="Microsoft.NET.Sdk" (no ".Web") — this is a plain class library,
+    not a web project. It has no HTTP pipeline or web server.
+    It just compiles to a .dll that other projects can import.
+  -->
+
+  <PropertyGroup>
+    <!-- Must match the TargetFramework of the API project so they can reference each other. -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!--
+      ImplicitUsings=enable: Auto-imports common namespaces (System, System.Linq, etc.)
+      so every file doesn't need a wall of 'using' statements at the top.
+    -->
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      Nullable=enable: Compiler warns when a nullable variable is used without
+      a null check. Helps catch bugs before they crash at runtime.
+    -->
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    NuGet packages for this project will be added here.
+    The MongoDB .NET Driver will be the main dependency:
+    <ItemGroup>
+      <PackageReference Include="MongoDB.Driver" Version="2.28.0" />
+    </ItemGroup>
+  -->
+
+</Project>

@@ -1,0 +1,56 @@
+<!--
+  DotShop.API.csproj — Project Configuration File
+  =====================================================
+  A .csproj file is like a recipe card for the .NET build system.
+  It tells the compiler:
+    - What kind of project this is (web API, class library, console app, etc.)
+    - What version of .NET to target
+    - What external libraries (NuGet packages) to include
+    - Any special build options
+
+  This file is read by `dotnet build`, `dotnet run`, and Visual Studio.
+  You rarely edit it by hand — the `dotnet add package` command updates it for you.
+-->
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!--
+    Sdk="Microsoft.NET.Sdk.Web" means this is a web project.
+    It automatically includes ASP.NET Core, Kestrel (the built-in web server),
+    and the HTTP pipeline infrastructure — no extra setup needed.
+  -->
+
+  <PropertyGroup>
+    <!--
+      TargetFramework: The version of .NET this project runs on.
+      net10.0 = .NET 10 (the latest at time of writing).
+      This ensures the project uses the right runtime features and APIs.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!--
+      Nullable=enable: Turns on C# nullable reference type checking.
+      With this on, the compiler will warn you if a variable that could be null
+      is used without a null check. This prevents a lot of NullReferenceExceptions.
+      Example: string name = null; → compiler warning!
+               string? name = null; → OK, you acknowledged it can be null.
+    -->
+    <Nullable>enable</Nullable>
+
+    <!--
+      ImplicitUsings=enable: Automatically imports the most commonly used
+      namespaces (like System, System.Collections.Generic, System.Linq, etc.)
+      so you don't have to write 'using System;' at the top of every file.
+    -->
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!--
+    We will add NuGet package references here later. Example:
+    <ItemGroup>
+      <PackageReference Include="MongoDB.Driver" Version="2.28.0" />
+    </ItemGroup>
+
+    NuGet is the package manager for .NET — similar to npm for Node.js.
+    Packages are external libraries downloaded from nuget.org.
+  -->
+
+</Project>
