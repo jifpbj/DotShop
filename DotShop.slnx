@@ -1,2 +1,6 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DotShop.API/DotShop.API.csproj" />
+    <Project Path="src/DotShop.Data/DotShop.Data.csproj" />
+  </Folder>
 </Solution>

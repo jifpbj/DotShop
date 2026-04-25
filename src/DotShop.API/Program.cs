@@ -1,103 +1,213 @@
 // ============================================================
-// Program.cs — The Entry Point of the Web API
+// Program.cs — Application Entry Point and Composition Root
 // ============================================================
-// Think of this file as the "front door" of the application.
-// When you run the app, .NET starts here. This file:
-//   1. Configures what features the app has (services)
-//   2. Configures how HTTP requests flow through the app (middleware pipeline)
-//   3. Starts the web server and listens for incoming requests
+// This file does three things:
+//   1. Registers all services into the DI container (builder.Services.*)
+//   2. Builds the app (builder.Build())
+//   3. Configures the middleware pipeline (app.Use*) and starts the server
 //
-// In .NET 6+, the old Startup.cs file was merged into Program.cs.
-// Everything is now in one place using the "minimal hosting model".
+// Think of it as the "wiring closet" — every component is connected here,
+// but the actual logic lives in its own class.
 // ============================================================
 
-// WebApplication.CreateBuilder sets up everything .NET needs to run a web server.
-// 'args' are command-line arguments passed when starting the app (e.g., dotnet run --port 8080).
+using System.Text;
+using DotShop.API;
+using DotShop.API.Middleware;
+using DotShop.API.Services;
+using DotShop.API.Services.Interfaces;
+using DotShop.Data;
+using DotShop.Data.Configuration;
+using DotShop.Data.Repositories;
+using DotShop.Data.Repositories.Interfaces;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// -------------------------------------------------------
-// SECTION 1: Register Services (Dependency Injection)
-// -------------------------------------------------------
-// "Services" are classes the app needs to function — like a database connection,
-// authentication handler, or business logic layer.
-//
-// Registering them here means you can ask for them anywhere in the app
-// without creating them manually. This is called "Dependency Injection" (DI).
-//
-// Think of it like a toolbox: you declare what tools you need here,
-// and .NET hands them to you whenever you ask.
-//
-// We will add our real services here later (MongoDB, JWT, etc.).
-// For now, this section is intentionally empty.
+// ===========================================================
+// SECTION 1 — Configuration Binding
+// ===========================================================
+// Tell .NET to read the "MongoDbSettings" and "JwtSettings" sections
+// from appsettings.json and bind them to our typed setting classes.
+// Any class that needs these values declares IOptions<T> in its constructor
+// and .NET fills them in automatically.
+builder.Services.Configure<MongoDbSettings>(
+    builder.Configuration.GetSection("MongoDbSettings"));
 
-// -------------------------------------------------------
-// SECTION 2: Build the App
-// -------------------------------------------------------
-// builder.Build() finalises all the service registrations above
-// and creates the actual web application object.
-// After this point, you cannot add new services.
-var app = builder.Build();
+builder.Services.Configure<JwtSettings>(
+    builder.Configuration.GetSection("JwtSettings"));
 
-// -------------------------------------------------------
-// SECTION 3: Configure the Middleware Pipeline
-// -------------------------------------------------------
-// "Middleware" is a chain of steps every HTTP request passes through
-// before it reaches your code, and every response passes through on the way back.
+// ===========================================================
+// SECTION 2 — Database (MongoDB)
+// ===========================================================
+// MongoDbContext is the wrapper around the MongoDB connection pool.
+// Singleton = one instance shared by all requests — correct because
+// MongoClient is thread-safe by design.
+builder.Services.AddSingleton<MongoDbContext>();
+
+// ===========================================================
+// SECTION 3 — Repositories
+// ===========================================================
+// Scoped = one instance per HTTP request.
+// Each request gets a fresh repository but they all share the same
+// MongoDbContext (and therefore the same connection pool).
 //
-// Example pipeline for a request to GET /api/products:
-//   [Request] → HTTPS redirect → Auth check → Route to controller → [Response]
-//
-// The ORDER of middleware matters. Each piece runs in the order it's added.
+// We register the interface → implementation pair so any class
+// that asks for IProductRepository receives a ProductRepository.
+builder.Services.AddScoped<IProductRepository,  ProductRepository>();
+builder.Services.AddScoped<IOrderRepository,    OrderRepository>();
+builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 
-// Automatically redirects http:// requests to https:// for security.
-// Example: http://localhost:5047 → https://localhost:7247
-app.UseHttpsRedirection();
+// ===========================================================
+// SECTION 4 — Services
+// ===========================================================
+builder.Services.AddScoped<IProductService,   ProductService>();
+builder.Services.AddScoped<IOrderService,     OrderService>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<ICustomerService,  CustomerService>();
+builder.Services.AddScoped<IAuthService,      AuthService>();
 
-// -------------------------------------------------------
-// SECTION 4: Demo Endpoint (Weather Forecast)
-// -------------------------------------------------------
-// This is a sample endpoint generated by the dotnet template.
-// It demonstrates how to define a minimal API endpoint without a controller.
-// We will REPLACE this with our real product/order endpoints later.
-//
-// app.MapGet maps an HTTP GET request at the given path to a function that handles it.
-// The function below returns 5 randomly generated "weather forecasts".
+// ===========================================================
+// SECTION 5 — JWT Authentication
+// ===========================================================
+// Read the JWT settings so we can reference them during setup.
+var jwtSettings = builder.Configuration
+    .GetSection("JwtSettings")
+    .Get<JwtSettings>()!;
 
-var summaries = new[]
+// AddAuthentication registers the auth system with JWT as the default scheme.
+// AddJwtBearer configures how incoming tokens are validated:
+//   - Is the issuer correct?      (matches our API's name)
+//   - Is the audience correct?    (matches our Angular client)
+//   - Has the token expired?
+//   - Is the signature valid?     (proves we created it with our SecretKey)
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer           = true,
+            ValidateAudience         = true,
+            ValidateLifetime         = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer              = jwtSettings.Issuer,
+            ValidAudience            = jwtSettings.Audience,
+            IssuerSigningKey         = new SymmetricSecurityKey(
+                                           Encoding.UTF8.GetBytes(jwtSettings.SecretKey))
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+// ===========================================================
+// SECTION 6 — Controllers
+// ===========================================================
+// AddControllers registers all classes annotated with [ApiController]
+// as request handlers. It also enables model validation via data annotations
+// (the [Required], [Range] etc. on our DTOs).
+builder.Services.AddControllers();
+
+// ===========================================================
+// SECTION 7 — Swagger / OpenAPI
+// ===========================================================
+// Swagger generates an interactive API documentation page at /swagger.
+// You can test every endpoint from the browser — extremely useful for demos.
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title       = "DotShop API",
+        Version     = "v1",
+        Description = "Demo electronics remarketing platform — Magnakom interview project"
+    });
 
-app.MapGet("/weatherforecast", () =>
-{
-    // Enumerable.Range(1, 5) creates the sequence [1, 2, 3, 4, 5].
-    // .Select() transforms each number into a WeatherForecast record.
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),  // today + N days
-            Random.Shared.Next(-20, 55),                         // random temp in Celsius
-            summaries[Random.Shared.Next(summaries.Length)]      // random summary word
-        ))
-        .ToArray(); // convert the lazy sequence to an actual array
-    return forecast;
+    // Add a JWT "Authorize" button to the Swagger UI.
+    // This lets you paste a token once and have it sent with every test request.
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name        = "Authorization",
+        Type        = SecuritySchemeType.Http,
+        Scheme      = "bearer",
+        BearerFormat = "JWT",
+        Description = "Paste your JWT token here. Obtained from POST /api/auth/login."
+    });
+
+    // Tells Swagger to include the Authorization header on all secured endpoints.
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id   = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
 });
 
-// Starts the web server and blocks until the app is shut down (e.g., Ctrl+C).
-app.Run();
-
-// -------------------------------------------------------
-// WeatherForecast Record (Demo Data Shape)
-// -------------------------------------------------------
-// A 'record' is a lightweight data class. It is immutable by default
-// (you can't change its fields after creation) and has built-in equality
-// based on values, not object identity.
+// ===========================================================
+// SECTION 8 — CORS (Cross-Origin Resource Sharing)
+// ===========================================================
+// Browsers block requests from one origin (http://localhost:4200)
+// to a different origin (http://localhost:5047) by default.
+// CORS tells the browser that our API intentionally allows this.
 //
-// This one is just the demo placeholder — we will define our own
-// models (Product, Order, Customer) in the Models/ folder.
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+// "ReactDev" policy allows the Angular dev server to call the API.
+// In production you'd replace this with your actual domain.
+builder.Services.AddCors(options =>
 {
-    // A computed property — not stored, just calculated on the fly.
-    // The '?' after string means Summary is nullable (it can be null).
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+    options.AddPolicy("AngularDev", policy =>
+        policy.WithOrigins("http://localhost:4200")
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
+
+// ===========================================================
+// Build the app — no more service registrations after this line
+// ===========================================================
+var app = builder.Build();
+
+// ===========================================================
+// SECTION 9 — Middleware Pipeline
+// ===========================================================
+// ORDER MATTERS. Each middleware wraps the next like Russian nesting dolls.
+// A request flows IN through each layer; the response flows back OUT.
+
+// Global error handler — catches unhandled exceptions anywhere in the pipeline
+// and converts them to consistent JSON responses. Must be FIRST so it catches
+// errors thrown by all subsequent middleware and controllers.
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+// Serve Swagger JSON at /swagger/v1/swagger.json
+app.UseSwagger();
+// Serve the interactive Swagger UI at /swagger
+app.UseSwaggerUI();
+
+// Allow the Angular dev server to make requests.
+app.UseCors("AngularDev");
+
+// Seed the database with sample products if running in Development mode
+// and the products collection is empty.
+if (app.Environment.IsDevelopment())
+    await SeedData.SeedAsync(app.Services);
+
+// UseAuthentication reads the JWT from the Authorization header and
+// populates HttpContext.User with the token's claims.
+// Must come BEFORE UseAuthorization.
+app.UseAuthentication();
+
+// UseAuthorization checks [Authorize] attributes on controllers.
+// If the user isn't authenticated or lacks the required role,
+// it returns 401 Unauthorized or 403 Forbidden automatically.
+app.UseAuthorization();
+
+// Maps requests to the matching [ApiController] action method.
+app.MapControllers();
+
+app.Run();

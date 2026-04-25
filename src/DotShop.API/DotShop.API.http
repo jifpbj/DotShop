@@ -1,0 +1,6 @@
+@DotShop.API_HostAddress = http://localhost:5047
+
+GET {{DotShop.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
