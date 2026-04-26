@@ -1,0 +1,68 @@
+<!-- cart.component.html -->
+
+<h1>Your Cart</h1>
+
+<!--
+  | async subscribes to items$ (a BehaviorSubject Observable).
+  'as items' assigns the emitted CartItem[] to a template variable.
+-->
+<ng-container *ngIf="items$ | async as items">
+
+  <!-- Empty state -->
+  <div class="empty-cart" *ngIf="items.length === 0 && !successMessage">
+    <p>Your cart is empty.</p>
+    <a [routerLink]="['/products']">← Browse products</a>
+  </div>
+
+  <!-- Cart table — only shown when there are items -->
+  <ng-container *ngIf="items.length > 0">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Grade</th>
+          <th>Price</th>
+          <th>Qty</th>
+          <th>Line Total</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of items">
+          <td>{{ item.productName }}</td>
+          <!-- Dynamic CSS class gives each grade its colour -->
+          <td><span [class]="'grade-' + item.conditionGrade">{{ item.conditionGrade }}</span></td>
+          <td>${{ item.price | number:'1.2-2' }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>${{ (item.price * item.quantity) | number:'1.2-2' }}</td>
+          <td>
+            <!-- (click) calls removeItem with this row's item -->
+            <button class="remove-btn" (click)="removeItem(item)" title="Remove">✕</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Order summary and checkout button -->
+    <div class="summary">
+      <div class="total">Total: ${{ cartService.total | number:'1.2-2' }}</div>
+
+      <!--
+        [disabled] binds the button's disabled attribute to isPlacingOrder.
+        While the API call is in flight, the button is greyed out to prevent
+        the user from clicking it again and creating duplicate orders.
+      -->
+      <button
+        class="btn-checkout"
+        [disabled]="isPlacingOrder"
+        (click)="placeOrder(items)">
+        {{ isPlacingOrder ? 'Placing order…' : 'Place Order' }}
+      </button>
+    </div>
+  </ng-container>
+
+  <!-- Success and error feedback -->
+  <p class="success" *ngIf="successMessage">✓ {{ successMessage }}</p>
+  <p class="error"   *ngIf="errorMessage">{{ errorMessage }}</p>
+
+</ng-container>

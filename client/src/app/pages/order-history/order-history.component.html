@@ -1,0 +1,58 @@
+<!-- order-history.component.html -->
+
+<h1>My Orders</h1>
+
+<ng-container *ngIf="orders$ | async as orders; else loading">
+
+  <!-- Empty state -->
+  <div class="empty" *ngIf="orders.length === 0">
+    <p>You haven't placed any orders yet.</p>
+  </div>
+
+  <!-- One card per order -->
+  <div class="order-card" *ngFor="let order of orders">
+
+    <div class="order-header">
+      <!-- Show last 6 chars of the MongoDB ObjectId as a short reference -->
+      <span class="order-id">Order #{{ order.id.slice(-6).toUpperCase() }}</span>
+      <span class="order-date">{{ formatDate(order.createdAt) }}</span>
+      <!--
+        Dynamic CSS class gives each status badge its own colour.
+        [class]="'status-badge status-' + order.status" resolves to e.g.
+        "status-badge status-Delivered" which matches the CSS above.
+      -->
+      <span [class]="'status-badge status-' + order.status">{{ order.status }}</span>
+    </div>
+
+    <!-- Line items table -->
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Grade</th>
+          <th>Unit Price</th>
+          <th>Qty</th>
+          <th>Line Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of order.items">
+          <td>{{ item.productName }}</td>
+          <td>{{ item.conditionGrade }}</td>
+          <td>${{ item.unitPrice | number:'1.2-2' }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>${{ (item.unitPrice * item.quantity) | number:'1.2-2' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="order-total">Total: ${{ order.totalAmount | number:'1.2-2' }}</div>
+
+  </div>
+
+</ng-container>
+
+<!-- Shown while the Observable is still loading -->
+<ng-template #loading>
+  <p>Loading your orders…</p>
+</ng-template>

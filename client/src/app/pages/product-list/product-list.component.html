@@ -1,0 +1,78 @@
+<!-- product-list.component.html -->
+
+<h1>Browse Refurbished Electronics</h1>
+
+<!-- ── Filters ─────────────────────────────────────────────── -->
+<div class="filters">
+  <!-- [(ngModel)] syncs the dropdown selection with the component property.
+       (change) fires loadProducts() every time the selection changes. -->
+  <select [(ngModel)]="selectedCategory" (change)="loadProducts()">
+    <option value="">All Categories</option>
+    <option *ngFor="let cat of categories.slice(1)" [value]="cat">{{ cat }}</option>
+  </select>
+
+  <select [(ngModel)]="selectedGrade" (change)="loadProducts()">
+    <option value="">All Grades</option>
+    <!-- *ngFor iterates over the grades array, rendering one <option> per item -->
+    <option *ngFor="let grade of grades.slice(1)" [value]="grade">Grade {{ grade }}</option>
+  </select>
+</div>
+
+<!-- Brief "added to cart" confirmation toast -->
+<p *ngIf="addedToCartMessage" style="color: green; font-weight: 500; margin-bottom: 1rem;">
+  ✓ {{ addedToCartMessage }}
+</p>
+
+<!-- ── Product Grid ────────────────────────────────────────── -->
+<!--
+  The | async pipe subscribes to the products$ Observable and
+  unwraps the emitted Product[] value into the 'products' template variable.
+  It also automatically unsubscribes when the component is destroyed.
+
+  *ngIf="products$ | async as products" means:
+    "Subscribe to products$. When it emits, store the value as 'products'
+     and render this block. If it hasn't emitted yet (loading), hide this block."
+-->
+<div *ngIf="products$ | async as products; else loading">
+
+  <!-- No results message -->
+  <p *ngIf="products.length === 0" style="color: #666;">
+    No products found for the selected filters.
+  </p>
+
+  <div class="product-grid">
+    <!-- *ngFor renders one card per product in the array -->
+    <div class="product-card" *ngFor="let product of products">
+
+      <!-- Product image — falls back to a placeholder if URL is empty -->
+      <img [src]="product.imageUrl || 'assets/placeholder.png'" [alt]="product.name" />
+
+      <div class="product-name">{{ product.name }}</div>
+
+      <!-- Condition grade with dynamic CSS class for colour coding -->
+      <div class="product-meta">
+        {{ product.category }} ·
+        <span [class]="'grade-' + product.conditionGrade">
+          Grade {{ product.conditionGrade }}
+        </span>
+      </div>
+
+      <div class="price">${{ product.price | number:'1.2-2' }}</div>
+
+      <!-- Show add-to-cart button if in stock, otherwise show a notice -->
+      <button
+        class="btn-add"
+        *ngIf="product.stockQuantity > 0"
+        (click)="addToCart(product)">
+        Add to Cart
+      </button>
+      <p class="out-of-stock" *ngIf="product.stockQuantity === 0">Out of Stock</p>
+
+    </div>
+  </div>
+</div>
+
+<!-- Loading state — shown while the Observable hasn't emitted yet -->
+<ng-template #loading>
+  <p>Loading products…</p>
+</ng-template>
